@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -23,19 +23,79 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    protected function casts(): array
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reports
+    |--------------------------------------------------------------------------
+    */
+
+    public function reports(): HasMany
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return $this->hasMany(Report::class);
     }
 
-    public function roles(): BelongsToMany
+    /*
+    |--------------------------------------------------------------------------
+    | Vendors
+    |--------------------------------------------------------------------------
+    */
+
+    public function vendors(): HasMany
+    {
+        return $this->hasMany(Vendor::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trucks - Driver
+    |--------------------------------------------------------------------------
+    */
+
+    public function drivenTrucks(): HasMany
+    {
+        return $this->hasMany(Truck::class, 'driver_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trucks - Contractor
+    |--------------------------------------------------------------------------
+    */
+
+    public function contractorTrucks(): HasMany
+    {
+        return $this->hasMany(Truck::class, 'contractor_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inspections
+    |--------------------------------------------------------------------------
+    */
+
+    public function inspections(): HasMany
+    {
+        return $this->hasMany(Inspection::class, 'inspector_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Roles
+    |--------------------------------------------------------------------------
+    */
+
+    public function roles()
     {
         return $this->belongsToMany(
             Role::class,
-            'user_roles'
-        )->withTimestamps();
+            'user_roles',
+            'user_id',
+            'role_id'
+        );
     }
 }
