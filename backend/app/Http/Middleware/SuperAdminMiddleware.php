@@ -11,9 +11,17 @@ class SuperAdminMiddleware
     /**
      * Handle an incoming request.
      */
-    public function handle(Request $request, Closure $next): Response
-    {
-        // Check if the user is authenticated
+    public function handle(
+        Request $request,
+        Closure $next
+    ): Response {
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK AUTHENTICATION
+        |--------------------------------------------------------------------------
+        */
+
         if (!$request->user()) {
             return response()->json([
                 'success' => false,
@@ -21,13 +29,29 @@ class SuperAdminMiddleware
             ], 401);
         }
 
-        // Check if the authenticated user is a Super Admin
-        if (!$request->user()->roles()->where('name', 'super_admin')->exists()) {
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK SUPER ADMIN ROLE
+        |--------------------------------------------------------------------------
+        */
+
+        $isSuperAdmin = $request->user()
+            ->roles()
+            ->where('name', 'super_admin')
+            ->exists();
+
+        if (!$isSuperAdmin) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized. Super Admin access required.',
             ], 403);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ALLOW REQUEST
+        |--------------------------------------------------------------------------
+        */
 
         return $next($request);
     }

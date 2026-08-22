@@ -8,6 +8,7 @@ use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -44,7 +45,7 @@ class AuthController extends Controller
         }
 
         $token = $user
-            ->createToken('katokkalinis-mobile')
+            ->createToken('katokkalinis-web')
             ->plainTextToken;
 
         return response()->json([
@@ -102,23 +103,11 @@ class AuthController extends Controller
             ], 422);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Create User
-        |--------------------------------------------------------------------------
-        */
-
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Find Role
-        |--------------------------------------------------------------------------
-        */
 
         $role = Role::where('name', $request->role)->first();
 
@@ -131,19 +120,7 @@ class AuthController extends Controller
             ], 400);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Attach Role
-        |--------------------------------------------------------------------------
-        */
-
         $user->roles()->attach($role->id);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Create Token
-        |--------------------------------------------------------------------------
-        */
 
         $token = $user
             ->createToken('katokkalinis-mobile')
@@ -201,19 +178,187 @@ class AuthController extends Controller
             ], 404);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Temporary Password Reset Response
-        |--------------------------------------------------------------------------
-        |
-        | This confirms that the account exists.
-        | Actual email reset will be added next.
-        |
-        */
-
         return response()->json([
             'success' => true,
             'message' => 'Password reset request received. Your email account was found.',
         ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CURRENT USER
+    |--------------------------------------------------------------------------
+    */
+
+    public function me(Request $request)
+    {
+        $user = $request->user()->load('roles');
+
+        if (!$this->isAdminUser($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not authorized to access admin settings.',
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+
+                'roles' => $user->roles->map(function ($role) {
+                    return [
+                        'name' => $role->name,
+                    ];
+                })->values(),
+            ],
+        ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE PROFILE
+    |--------------------------------------------------------------------------
+    */
+
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$this->isAdminUser($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not authorized to update this profile.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+
+            'email' => [
+                'required',
+                'email',
+                Rule::unique('users', 'email')
+                    ->ignore($user->id),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please check your profile information.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->save();
+
+        $user->load('roles');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+
+                'roles' => $user->roles->map(function ($role) {
+                    return [
+                        'name' => $role->name,
+                    ];
+                })->values(),
+            ],
+        ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CHANGE PASSWORD
+    |--------------------------------------------------------------------------
+    */
+
+   public function changePassword(Request $request)
+{
+    $user = $request->user();
+
+    if (!$this->isAdminUser($user)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'You are not authorized to change this password.',
+        ], 403);
+    }
+
+    $validator = Validator::make($request->all(), [
+        'current_password' => 'required|string',
+
+        'new_password' => [
+            'required',
+            'string',
+            'min:8',
+            'confirmed',
+        ],
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Please check your password information.',
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    // Check the current password
+    if (!Hash::check(
+        $request->current_password,
+        $user->password
+    )) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Current password is incorrect.',
+        ], 422);
+    }
+
+    // Make sure the new password is different
+    if (Hash::check(
+        $request->new_password,
+        $user->password
+    )) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Your new password must be different from your current password.',
+        ], 422);
+    }
+
+    // Hash the new password before saving it
+    $user->password = Hash::make($request->new_password);
+    $user->save();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Password changed successfully.',
+    ]);
+}
+    /*
+    |--------------------------------------------------------------------------
+    | ADMIN CHECK
+    |--------------------------------------------------------------------------
+    */
+
+    private function isAdminUser(User $user): bool
+    {
+        return $user->roles()
+            ->whereIn('name', [
+                'admin',
+                'super_admin',
+            ])
+            ->exists();
     }
 }

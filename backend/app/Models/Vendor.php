@@ -11,6 +11,8 @@ class Vendor extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     protected $fillable = [
         'user_id',
         'barangay_id',
